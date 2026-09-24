@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+*.mp4
+*.part
+*.download.json
+*.zip
+*cookies*.txt
+*cookies*.json
+douyin-chrome-profile/
