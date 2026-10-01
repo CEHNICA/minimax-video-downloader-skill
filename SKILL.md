@@ -16,7 +16,7 @@ python -X utf8 $videoScript '用户提供的分享链接或文案'
 
 ## 平台边界
 
-- **小红书：**保留短链跳转后的完整笔记参数，包括 `xsec_token`，再由 `yt-dlp` 提取视频。不要默认读取浏览器 Cookie。`--probe-only` 会列出可用格式。需要 Python 中的 `yt-dlp`；有 `ffprobe` 时检查实际音视频，没有时必须明确说尚未验证。
+- **小红书：**保留短链跳转后的完整笔记参数，包括 `xsec_token`，再由 `yt-dlp` 提取视频。不要默认读取浏览器 Cookie。`--probe-only` 会列出可用格式。小红书提取器有时不给可用扩展名，`yt-dlp` 会落成 `*.unknown_video`，这种文件 ffprobe 能验证但 Windows 打不开；脚本因此在验证通过后按实际容器重命名为 `.mp4`/`.webm` 等，并在 stderr 说明重命名结果，报告里的 `path` 和 `.download.json` 都指向重命名后的文件。需要 Python 中的 `yt-dlp`；有 `ffprobe` 时检查实际音视频，没有时必须明确说尚未验证。
 - **哔哩哔哩：**接受 `bilibili.com/video/...`、`b23.tv` 短链、纯 BV 或 av 号。`--quality 1080|720|480|360|best` 设定画质上限，默认 `best`；`--probe-only` 列出全部可用格式。**必须使用脚本自带的选择器而不是 yt-dlp 默认的 `bv*+ba`**：B 站 CDN 对未登录的 AV1 视频流持续返回 503，音频能下完而视频流为 0 字节，重试无效。脚本因此固定按 H.264 → H.265 → 任意编码的顺序选择，AV1 只作最后兜底。1080P 高码率和 4K 需要大会员，缺失时属正常情况，不要改用 Cookie 绕过。需要 Python `yt-dlp` 和 `ffprobe`，缺少 `ffprobe` 时不下载。
 - **微信视频号：**只接受 `https://weixin.qq.com/sph/...`。完整公开分享 URL 会发给第三方解析服务 `v.mtotech.com`，应在执行时简要告知用户；用户已要求下载时直接继续。视频文件只从 `finder.video.qq.com` 下载，不跟随跨域跳转，不输出或保存临时签名直链。`--probe-only` 仅报告是否解析成功。需要 `ffprobe`，缺少时不能宣称完成下载。[第三方服务说明](https://v.mtotech.com/)。
 - **抖音：**脚本从分享链接取得作品 ID，使用独立、持久的 Chrome 配置以手机视图打开公开视频并读取播放器信息，再下载到临时目录。此过程会短暂显示另一个 Chrome 窗口，但不会关闭用户现有窗口、读取用户默认浏览器 Cookie 或修改代理。只关闭脚本自己启动的窗口。专用配置会保留运行时产生的浏览器数据；如需清理，可在脚本结束后删除 `%LOCALAPPDATA%\MiniMax\video-downloader\douyin-chrome-profile`。最多尝试 4 次；没有视频时准确失败，不默认要求用户导出 Cookie。需要 Python `playwright`、Google Chrome、`yt-dlp` 和 `ffprobe`；缺少依赖时说明原因，不自行安装系统软件。`--probe-only` 仍会打开独立浏览器，但不会下载视频。可用 `--profile-dir '专用目录'` 指定独立配置、`--ratio 1080p` 请求画质；默认请求 720p。`douyin-batch-summary` 是另一项采集与报告任务，独立使用。

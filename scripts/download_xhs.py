@@ -17,6 +17,38 @@ ROOT_DOMAINS = ("xiaohongshu.com", "xhslink.com", "xhslink.cn")
 NOTE_PATH = re.compile(r"^/(?:explore|discovery/item)/([0-9a-f]+)(?:/)?$")
 URL_PATTERN = re.compile(r"https?://[^\s<>\"'\[\]（），。；！？]+", re.I)
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+# The Xiaohongshu extractor sometimes reports no usable extension and yt-dlp
+# writes `%(ext)s` as a literal fallback, leaving files Windows cannot open.
+PLAYABLE_EXTENSIONS = (".mp4", ".m4v", ".mov", ".webm", ".mkv", ".flv", ".ts", ".m4a", ".mp3")
+CONTAINER_EXTENSIONS = (
+    (("mp4", "m4a", "3gp", "mov"), ".mp4"),
+    (("matroska", "webm"), ".webm"),
+    (("mpegts",), ".ts"),
+    (("flv",), ".flv"),
+)
+
+
+def extension_for_container(format_name: str) -> str | None:
+    """Map an ffprobe format_name to the extension Windows players recognise."""
+    names = {part.strip().lower() for part in format_name.split(",")}
+    for candidates, extension in CONTAINER_EXTENSIONS:
+        if names & set(candidates):
+            return extension
+    return None
+
+
+def normalise_extension(path: Path, format_name: str) -> tuple[Path, bool]:
+    """Rename a verified file whose extension does not match its real container."""
+    if path.suffix.lower() in PLAYABLE_EXTENSIONS:
+        return path, False
+    extension = extension_for_container(format_name)
+    if not extension:
+        return path, False
+    renamed = path.with_name(path.name[: len(path.name) - len(path.suffix)] + extension)
+    if renamed == path:
+        return path, False
+    path.rename(renamed)
+    return renamed, True
 
 
 def redact_share_parameters(message: str) -> str:
@@ -100,7 +132,7 @@ def inspect_media(path: Path) -> dict:
     if not probe:
         return {"media_validation": "unavailable: ffprobe not installed"}
     result = subprocess.run(
-        [probe, "-v", "error", "-show_entries", "format=duration:stream=codec_type,codec_name,width,height",
+        [probe, "-v", "error", "-show_entries", "format=format_name,duration", "-show_entries", "stream=codec_type,codec_name,width,height",
          "-of", "json", str(path)], capture_output=True, text=True, encoding="utf-8", timeout=45)
     if result.returncode:
         raise ValueError("文件已保存，但 ffprobe 验证失败，不能报告下载成功。")
@@ -109,6 +141,7 @@ def inspect_media(path: Path) -> dict:
     if not videos:
         raise ValueError("文件中没有可识别的视频轨道。")
     return {"media_validation": "passed", "duration_seconds": float(data.get("format", {}).get("duration", 0)),
+            "format_name": data.get("format", {}).get("format_name", ""),
             "width": videos[0].get("width"), "height": videos[0].get("height"),
             "video_codec": videos[0].get("codec_name"),
             "audio_codecs": [s.get("codec_name") for s in data.get("streams", []) if s.get("codec_type") == "audio"]}
@@ -162,8 +195,13 @@ def main() -> int:
             path = Path(ydl.prepare_filename(info)).resolve()
             if not path.is_file() or path.stat().st_size == 0:
                 raise ValueError("下载没有产生有效文件。")
+            media = inspect_media(path)
+            if media.get("media_validation") == "passed":
+                path, renamed = normalise_extension(path, media.get("format_name", ""))
+                if renamed:
+                    print(f"已按实际容器格式重命名：{path.name}", file=sys.stderr)
             summary.update({"path": str(path), "size_bytes": path.stat().st_size})
-            summary.update(inspect_media(path))
+            summary.update(media)
             with path.open("rb") as handle:
                 summary["sha256"] = hashlib.file_digest(handle, "sha256").hexdigest()
             path.with_suffix(".download.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
