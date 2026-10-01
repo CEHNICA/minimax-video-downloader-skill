@@ -32,6 +32,8 @@ def platform_for_url(url: str) -> str | None:
     if host in ("douyin.com", "www.douyin.com", "m.douyin.com", "v.douyin.com",
                 "iesdouyin.com", "www.iesdouyin.com"):
         return "douyin"
+    if host in ("bilibili.com", "www.bilibili.com", "m.bilibili.com", "b23.tv", "www.b23.tv"):
+        return "bilibili"
     return None
 
 
@@ -43,7 +45,7 @@ def choose_share(share: str) -> tuple[str, str]:
         if platform:
             choices[url] = platform
     if not choices:
-        raise ValueError("未找到支持的视频链接。当前支持小红书、微信视频号和抖音分享链接。")
+        raise ValueError("未找到支持的视频链接。当前支持小红书、微信视频号、抖音和哔哩哔哩分享链接。")
     if len(choices) != 1:
         raise ValueError("发现多条视频链接，请一次只提供一条。")
     url, platform = next(iter(choices.items()))
@@ -62,16 +64,20 @@ def main() -> int:
     parser.add_argument("--cookies", type=Path, help="仅供小红书使用，且须由用户明确提供")
     parser.add_argument("--profile-dir", type=Path, help="仅供抖音使用的独立 Chrome 配置目录")
     parser.add_argument("--ratio", choices=("1080p", "720p", "540p", "480p", "360p"), help="仅供抖音使用的视频画质")
+    parser.add_argument("--quality", choices=("best", "1080", "720", "480", "360"), help="仅供哔哩哔哩使用的画质上限")
     args = parser.parse_args()
     platform, selected_url = choose_share(args.share)
     if args.cookies and platform != "xiaohongshu":
         raise ValueError("--cookies 只用于小红书；其他平台不读取 Cookie。")
     if (args.profile_dir or args.ratio) and platform != "douyin":
         raise ValueError("--profile-dir 和 --ratio 只用于抖音。")
+    if args.quality and platform != "bilibili":
+        raise ValueError("--quality 只用于哔哩哔哩。")
     script = Path(__file__).resolve().parent / {
         "xiaohongshu": "download_xhs.py",
         "wechat-channels": "download_wechat_channels.py",
         "douyin": "download_douyin.py",
+        "bilibili": "download_bilibili.py",
     }[platform]
     command = [sys.executable, str(script), selected_url]
     if args.output_dir:
@@ -84,6 +90,8 @@ def main() -> int:
         command.extend(["--profile-dir", str(args.profile_dir)])
     if args.ratio:
         command.extend(["--ratio", args.ratio])
+    if args.quality:
+        command.extend(["--quality", args.quality])
     print(f"已识别平台：{platform}。", file=sys.stderr)
     return subprocess.run(command, check=False).returncode
 

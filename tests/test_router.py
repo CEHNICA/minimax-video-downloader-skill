@@ -45,7 +45,22 @@ class RoutingTests(unittest.TestCase):
 
     def test_reject_unsupported_site(self):
         with self.assertRaises(ValueError):
-            router.choose_platform("https://www.bilibili.com/video/BV123")
+            router.choose_platform("https://www.youtube.com/watch?v=abc123")
+
+    def test_bilibili_long_link(self):
+        self.assertEqual(router.choose_platform("https://www.bilibili.com/video/BV1b9ad6xEnD/"), "bilibili")
+
+    def test_bilibili_share_link_with_tracking_query(self):
+        share = ("看看这个 https://www.bilibili.com/video/BV1b9ad6xEnD/?spm_id_from=333.999&vd_source=abc 推荐")
+        self.assertEqual(router.choose_platform(share), "bilibili")
+
+    def test_bilibili_short_link(self):
+        self.assertEqual(router.choose_platform("https://b23.tv/AbCd12"), "bilibili")
+
+    def test_reject_bilibili_lookalike(self):
+        for url in ("https://www.bilibili.com.evil.com/video/BV1b9ad6xEnD/", "https://b23.tv.evil.com/AbCd12"):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                router.choose_platform(url)
 
 
 if __name__ == "__main__":
